@@ -28,16 +28,17 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-if os.getenv("ANTHROPIC_BASE_URL"):
-    os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
+# if os.getenv("ANTHROPIC_BASE_URL"):
+#     os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
 WORKDIR = Path.cwd()
-client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL"))
+client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL") ,auth_token=os.getenv("ANTHROPIC_AUTH_TOKEN"))
 MODEL = os.environ["MODEL_ID"]
 
 SYSTEM = f"You are a coding agent at {WORKDIR}. Use tools to solve tasks. Act, don't explain."
 
-
+# 把相对路径转成绝对路径后检查是否还在项目目录内，
+# 防止模型通过 ../../etc/passwd 这种路径读写项目外的文件
 def safe_path(p: str) -> Path:
     path = (WORKDIR / p).resolve()
     if not path.is_relative_to(WORKDIR):
@@ -61,10 +62,10 @@ def run_bash(command: str) -> str:
 def run_read(path: str, limit: int = None) -> str:
     try:
         text = safe_path(path).read_text()
-        lines = text.splitlines()
+        lines = text.splitlines() # 按换行符切成列表，比如 "a\nb\nc" -> ["a", "b", "c"]
         if limit and limit < len(lines):
             lines = lines[:limit] + [f"... ({len(lines) - limit} more lines)"]
-        return "\n".join(lines)[:50000]
+        return "\n".join(lines)[:50000]  # 把列表重新拼成字符串，截断到 5 万字符
     except Exception as e:
         return f"Error: {e}"
 
@@ -72,7 +73,7 @@ def run_read(path: str, limit: int = None) -> str:
 def run_write(path: str, content: str) -> str:
     try:
         fp = safe_path(path)
-        fp.parent.mkdir(parents=True, exist_ok=True)
+        fp.parent.mkdir(parents=True, exist_ok=True)  # 如果上级的上级也不存在，一路创建
         fp.write_text(content)
         return f"Wrote {len(content)} bytes to {path}"
     except Exception as e:
@@ -86,6 +87,7 @@ def run_edit(path: str, old_text: str, new_text: str) -> str:
         if old_text not in content:
             return f"Error: Text not found in {path}"
         fp.write_text(content.replace(old_text, new_text, 1))
+        # str.replace(旧, 新, 次数)
         return f"Edited {path}"
     except Exception as e:
         return f"Error: {e}"
@@ -124,7 +126,9 @@ def agent_loop(messages: list):
         for block in response.content:
             if block.type == "tool_use":
                 handler = TOOL_HANDLERS.get(block.name)
+                # **kw 字典解包，把 block.input 里的键值对当成参数传给 handler
                 output = handler(**block.input) if handler else f"Unknown tool: {block.name}"
+                
                 print(f"> {block.name}: {output[:200]}")
                 results.append({"type": "tool_result", "tool_use_id": block.id, "content": output})
         messages.append({"role": "user", "content": results})

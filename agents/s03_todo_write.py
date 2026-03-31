@@ -56,12 +56,17 @@ class TodoManager:
     def update(self, items: list) -> str:
         if len(items) > 20:
             raise ValueError("Max 20 todos allowed")
-        validated = []
-        in_progress_count = 0
+        validated = [] # 存放校验通过的任务
+        in_progress_count = 0  # 记录有几个任务是"正在做"
         for i, item in enumerate(items):
+            # .get("text", "") 表示取 text 字段，取不到就给空字符串，然后 .strip() 去掉前后空白
             text = str(item.get("text", "")).strip()
+            # .get("status", "pending") 取 status 字段，取不到就默认 "pending"，然后转小写
             status = str(item.get("status", "pending")).lower()
+            # .get("id", str(i + 1)) 取 id 字段，取不到就默认为序号
             item_id = str(item.get("id", str(i + 1)))
+            # raise 会抛出一个异常，如果没人接住，程序就崩了。但这里有人接住了。
+            #看 agent_loop 里的第 180-183 行
             if not text:
                 raise ValueError(f"Item {item_id}: text required")
             if status not in ("pending", "in_progress", "completed"):
@@ -187,6 +192,7 @@ def agent_loop(messages: list):
                     used_todo = True
         rounds_since_todo = 0 if used_todo else rounds_since_todo + 1
         if rounds_since_todo >= 3:
+            # 插到开头，确保提醒在最显眼的位置
             results.insert(0, {"type": "text", "text": "<reminder>Update your todos.</reminder>"})
         messages.append({"role": "user", "content": results})
 

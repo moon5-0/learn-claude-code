@@ -32,10 +32,10 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-if os.getenv("ANTHROPIC_BASE_URL"):
-    os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
+# if os.getenv("ANTHROPIC_BASE_URL"):
+#     os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
-client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL"))
+client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL") ,auth_token=os.getenv("ANTHROPIC_AUTH_TOKEN"))
 MODEL = os.environ["MODEL_ID"]
 
 SYSTEM = f"You are a coding agent at {os.getcwd()}. Use bash to solve tasks. Act, don't explain."
@@ -52,7 +52,7 @@ TOOLS = [{
 
 
 def run_bash(command: str) -> str:
-    dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
+    dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"] # 安全检查（拦截 rm -rf /、sudo 等危险命令
     if any(d in command for d in dangerous):
         return "Error: Dangerous command blocked"
     try:
@@ -70,7 +70,7 @@ def agent_loop(messages: list):
         response = client.messages.create(
             model=MODEL, system=SYSTEM, messages=messages,
             tools=TOOLS, max_tokens=8000,
-        )
+        ) # 当你调用 client.messages.create(...) 时，返回的 response.content 里面装的不是普通字典，而是 SDK 定义好的对象
         # Append assistant turn
         messages.append({"role": "assistant", "content": response.content})
         # If the model didn't call a tool, we're done
@@ -96,12 +96,12 @@ if __name__ == "__main__":
         except (EOFError, KeyboardInterrupt):
             break
         if query.strip().lower() in ("q", "exit", ""):
-            break
+            break  # 输入 q、exit 或空回车退出
         history.append({"role": "user", "content": query})
         agent_loop(history)
         response_content = history[-1]["content"]
-        if isinstance(response_content, list):
+        if isinstance(response_content, list): # 检查response_content 是一个列表
             for block in response_content:
-                if hasattr(block, "text"):
-                    print(block.text)
+                if hasattr(block, "text"): # 问"这个 block 有没有 text 这个属性
+                    print(block.text) 
         print()
