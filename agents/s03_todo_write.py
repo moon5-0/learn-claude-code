@@ -36,11 +36,11 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-if os.getenv("ANTHROPIC_BASE_URL"):
-    os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
+# if os.getenv("ANTHROPIC_BASE_URL"):
+#     os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
 WORKDIR = Path.cwd()
-client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL"))
+client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL") ,auth_token=os.getenv("ANTHROPIC_AUTH_TOKEN"))
 MODEL = os.environ["MODEL_ID"]
 
 SYSTEM = f"""You are a coding agent at {WORKDIR}.
@@ -66,7 +66,7 @@ class TodoManager:
             # .get("id", str(i + 1)) 取 id 字段，取不到就默认为序号
             item_id = str(item.get("id", str(i + 1)))
             # raise 会抛出一个异常，如果没人接住，程序就崩了。但这里有人接住了。
-            #看 agent_loop 里的第 180-183 行
+            # 看 agent_loop 里的第 180-183 行
             if not text:
                 raise ValueError(f"Item {item_id}: text required")
             if status not in ("pending", "in_progress", "completed"):
@@ -86,7 +86,8 @@ class TodoManager:
         for item in self.items:
             marker = {"pending": "[ ]", "in_progress": "[>]", "completed": "[x]"}[item["status"]]
             lines.append(f"{marker} #{item['id']}: {item['text']}")
-        done = sum(1 for t in self.items if t["status"] == "completed")
+        # 统计已完成的任务数，
+        done = sum(1 for t in self.items if t["status"] == "completed") # 每遇到一个 completed 的就加 1。
         lines.append(f"\n({done}/{len(self.items)} completed)")
         return "\n".join(lines)
 

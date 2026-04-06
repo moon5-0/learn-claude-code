@@ -26,7 +26,7 @@ Key insight: "Fire and forget -- the agent doesn't block while the command runs.
 """
 
 import os
-import subprocess
+import subprocess # 让你在 Python 程序里执行 Shell 命令
 import threading
 import uuid
 from pathlib import Path
@@ -58,14 +58,23 @@ class BackgroundManager:
         task_id = str(uuid.uuid4())[:8]
         self.tasks[task_id] = {"status": "running", "result": None, "command": command}
         thread = threading.Thread(
-            target=self._execute, args=(task_id, command), daemon=True
+        target=self._execute,   # 线程要执行的函数（注意不要加括号，只写函数名）
+        args=(task_id, command), # 传给 target 函数的参数（元组形式）
+        daemon=True              # 守护线程：主程序结束时，这个线程自动强制结束
         )
-        thread.start()
+        # 这里设置成 True 是因为后台任务不应该阻止程序退出（比如用户按 Ctrl+C 时，脚本能快速退出）。
+
+        thread.start() # 启动后台线程，开始执行 target 函数 （立即返回）即主进程立刻执行接下来的代码
         return f"Background task {task_id} started: {command[:80]}"
 
     def _execute(self, task_id: str, command: str):
         """Thread target: run subprocess, capture output, push to queue."""
         try:
+            # r 是一个 CompletedProcess 对象，主要有三个属性：
+
+            # r.returncode：命令的退出码（0 通常表示成功，非0表示错误）
+            # r.stdout：命令的标准输出（字符串，如果 capture_output=True）
+            # r.stderr：命令的标准错误（字符串）
             r = subprocess.run(
                 command, shell=True, cwd=WORKDIR,
                 capture_output=True, text=True, timeout=300
@@ -80,6 +89,12 @@ class BackgroundManager:
             status = "error"
         self.tasks[task_id]["status"] = status
         self.tasks[task_id]["result"] = output or "(no output)"
+        # 在需要保护的代码外面使用 with 语句
+        # with self._lock: 的工作原理
+        # 当一个线程执行到 with self._lock: 时，它会尝试获取锁。
+        # 如果锁当前被其他线程持有，这个线程就会阻塞等待，直到锁被释放。
+        # 一旦获取到锁，它就进入 with 代码块，执行里面的操作。
+        # 代码块结束后，自动释放锁，让其他线程有机会获取。
         with self._lock:
             self._notification_queue.append({
                 "task_id": task_id,
@@ -193,6 +208,9 @@ def agent_loop(messages: list):
             notif_text = "\n".join(
                 f"[bg:{n['task_id']}] {n['status']}: {n['result']}" for n in notifs
             )
+            # API 要求消息必须 user/assistant 交替。刚刚加了一条 user 消息（后台结果），
+            # 后面紧接着还是 LLM 的 assistant 回复，如果不加这条就会出现两条 user 消息连续，
+            # API 会报错。
             messages.append({"role": "user", "content": f"<background-results>\n{notif_text}\n</background-results>"})
             messages.append({"role": "assistant", "content": "Noted background results."})
         response = client.messages.create(

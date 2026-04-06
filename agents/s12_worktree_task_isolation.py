@@ -224,32 +224,35 @@ EVENTS = EventBus(REPO_ROOT / ".worktrees" / "events.jsonl")
 # -- WorktreeManager: create/list/run/remove git worktrees + lifecycle index --
 class WorktreeManager:
     def __init__(self, repo_root: Path, tasks: TaskManager, events: EventBus):
-        self.repo_root = repo_root
+        self.repo_root = repo_root # git 仓库根目录
         self.tasks = tasks
         self.events = events
-        self.dir = repo_root / ".worktrees"
+        self.dir = repo_root / ".worktrees" # worktree 都放在这个目录下
         self.dir.mkdir(parents=True, exist_ok=True)
-        self.index_path = self.dir / "index.json"
+        self.index_path = self.dir / "index.json"  # 注册表文件路径
         if not self.index_path.exists():
             self.index_path.write_text(json.dumps({"worktrees": []}, indent=2))
-        self.git_available = self._is_git_repo()
+        self.git_available = self._is_git_repo()  # 检查 git 是否可用
 
     def _is_git_repo(self) -> bool:
         try:
             r = subprocess.run(
-                ["git", "rev-parse", "--is-inside-work-tree"],
+                ["git", "rev-parse", "--is-inside-work-tree"], # 检查是否在 git 仓库里
                 cwd=self.repo_root,
                 capture_output=True,
                 text=True,
                 timeout=10,
-            )
+            ) # 没太看懂
             return r.returncode == 0
         except Exception:
             return False
-
+    #  执行 git 命令的封装
     def _run_git(self, args: list[str]) -> str:
         if not self.git_available:
             raise RuntimeError("Not in a git repository. worktree tools require git.")
+        # ["git", *args] 是 Python 的解包语法。
+        # 如果 args = ["worktree", "add", "-b", "wt/foo"]，
+        # 结果就是 ["git", "worktree", "add", "-b", "wt/foo"]。
         r = subprocess.run(
             ["git", *args],
             cwd=self.repo_root,
@@ -274,7 +277,7 @@ class WorktreeManager:
             if wt.get("name") == name:
                 return wt
         return None
-
+    # 校验名字合法性
     def _validate_name(self, name: str):
         if not re.fullmatch(r"[A-Za-z0-9._-]{1,40}", name or ""):
             raise ValueError(

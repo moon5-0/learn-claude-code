@@ -57,19 +57,38 @@ SKILLS_DIR = WORKDIR / "skills"
 # -- SkillLoader: scan skills/<name>/SKILL.md with YAML frontmatter --
 class SkillLoader:
     def __init__(self, skills_dir: Path):
-        self.skills_dir = skills_dir
-        self.skills = {}
-        self._load_all()
+        self.skills_dir = skills_dir    # 存技能目录路径，比如 /xxx/skills
+        # {
+        #     "weather": {
+        #         "meta": {
+        #             "name": "weather",
+        #             "description": "Get current weather for a city",
+        #             "tags": "tool, external"
+        #         },
+        #         "body": "# Weather Skill\nUse this skill to fetch weather data.",
+        #         "path": "/absolute/path/to/skills/weather/SKILL.md"
+        #     },
+        #     "calculator": {
+        #         "meta": {},                           # 无 frontmatter，所以是空字典
+        #         "body": "# Calculator\nPerform basic arithmetic.",
+        #         "path": "/absolute/path/to/skills/calculator/SKILL.md"
+        #     }
+        # }
+        # skills 的格式
+        self.skills = {}                # 空字典，存所有技能数据
+        self._load_all()                # 初始化时立刻扫描加载
 
+    # 自动扫描一遍 skills/ 目录
     def _load_all(self):
-        if not self.skills_dir.exists():
+        if not self.skills_dir.exists():       # 目录不存在就跳过
             return
-        for f in sorted(self.skills_dir.rglob("SKILL.md")):
-            text = f.read_text()
-            meta, body = self._parse_frontmatter(text)
-            name = meta.get("name", f.parent.name)
+        for f in sorted(self.skills_dir.rglob("SKILL.md")):   # 递归找所有 SKILL.md
+            text = f.read_text()                                # 以字符串形式读取整个文件
+            meta, body = self._parse_frontmatter(text)          # 拆成元数据和正文
+            name = meta.get("name", f.parent.name)              # 取名字，没有就用目录名
             self.skills[name] = {"meta": meta, "body": body, "path": str(f)}
 
+    # 分割文本，分成引言 和 正文
     def _parse_frontmatter(self, text: str) -> tuple:
         """Parse YAML frontmatter between --- delimiters."""
         match = re.match(r"^---\n(.*?)\n---\n(.*)", text, re.DOTALL)
@@ -81,7 +100,7 @@ class SkillLoader:
                 key, val = line.split(":", 1)
                 meta[key.strip()] = val.strip()
         return meta, match.group(2).strip()
-
+    # 给系统提示词的简单概述
     def get_descriptions(self) -> str:
         """Layer 1: short descriptions for the system prompt."""
         if not self.skills:
@@ -95,7 +114,7 @@ class SkillLoader:
                 line += f" [{tags}]"
             lines.append(line)
         return "\n".join(lines)
-
+    # 
     def get_content(self, name: str) -> str:
         """Layer 2: full skill body returned in tool_result."""
         skill = self.skills.get(name)

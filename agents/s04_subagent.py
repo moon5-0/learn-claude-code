@@ -32,8 +32,8 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-if os.getenv("ANTHROPIC_BASE_URL"):
-    os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
+# if os.getenv("ANTHROPIC_BASE_URL"):
+#     os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
 WORKDIR = Path.cwd()
 client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL"))
@@ -114,7 +114,7 @@ CHILD_TOOLS = [
 
 # -- Subagent: fresh context, filtered tools, summary-only return --
 def run_subagent(prompt: str) -> str:
-    sub_messages = [{"role": "user", "content": prompt}]  # fresh context
+    sub_messages = [{"role": "user", "content": prompt}]  # 局部变量，只在函数内存在
     for _ in range(30):  # safety limit
         response = client.messages.create(
             model=MODEL, system=SUBAGENT_SYSTEM, messages=sub_messages,
@@ -131,6 +131,11 @@ def run_subagent(prompt: str) -> str:
                 results.append({"type": "tool_result", "tool_use_id": block.id, "content": str(output)[:50000]})
         sub_messages.append({"role": "user", "content": results})
     # Only the final text returns to the parent -- child context is discarded
+    # hasattr 过滤后只剩 TextBlock
+    # 提取 .text → ["这个项目用 pytest"]
+    # join → "这个项目用 pytest"
+    # 非空，不走 or
+    # 返回 "这个项目用 pytest"
     return "".join(b.text for b in response.content if hasattr(b, "text")) or "(no summary)"
 
 
@@ -143,6 +148,23 @@ PARENT_TOOLS = CHILD_TOOLS + [
 
 def agent_loop(messages: list):
     while True:
+       # Message(
+        #     id="msg_01XFDUDYJgAACzvnptvVoYEL",
+        #     role="assistant",
+        #     stop_reason="tool_use",       # 或 "end_turn"、"max_tokens"
+        #     content=[
+        #         TextBlock(type="text", text="让我来读一下这个文件"),
+        #         ToolUseBlock(
+        #             type="tool_use",
+        #             id="toolu_01A09q90qw90lq917835lq",
+        #             name="read_file",
+        #             input={"path": "hello.py"}
+        #         )
+        #     ],
+        #     model="claude-sonnet-4-6",
+        #     usage=Usage(input_tokens=1234, output_tokens=567)
+        # )
+        # client.messages.create 返回的是上面的Message对象
         response = client.messages.create(
             model=MODEL, system=SYSTEM, messages=messages,
             tools=PARENT_TOOLS, max_tokens=8000,
@@ -154,6 +176,7 @@ def agent_loop(messages: list):
         for block in response.content:
             if block.type == "tool_use":
                 if block.name == "task":
+                    # 取描述信息，取不到就默认 "subtask"
                     desc = block.input.get("description", "subtask")
                     print(f"> task ({desc}): {block.input['prompt'][:80]}")
                     output = run_subagent(block.input["prompt"])

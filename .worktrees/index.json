@@ -1,0 +1,22 @@
+{
+  "worktrees": [
+    {
+      "name": "auth-refactor",
+      "path": "/Users/a8848/Documents/learn-claude-code/.worktrees/auth-refactor",
+      "branch": "wt/auth-refactor",
+      "task_id": 1,
+      "status": "removed",
+      "created_at": 1775373837.726471,
+      "removed_at": 1775374525.553162
+    },
+    {
+      "name": "ui-login",
+      "path": "/Users/a8848/Documents/learn-claude-code/.worktrees/ui-login",
+      "branch": "wt/ui-login",
+      "task_id": 8,
+      "status": "kept",
+      "created_at": 1775373837.769245,
+      "kept_at": 1775374437.322679
+    }
+  ]
+}

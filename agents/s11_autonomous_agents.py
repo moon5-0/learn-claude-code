@@ -74,7 +74,14 @@ VALID_MSG_TYPES = {
 shutdown_requests = {}
 plan_requests = {}
 _tracker_lock = threading.Lock()
-_claim_lock = threading.Lock()
+_claim_lock = threading.Lock() # 能否就用_tracker_lock呢？
+
+# alice 正在认领 task_1（需要锁）
+#     ↓ 锁被占用
+# bob 想更新 shutdown_requests 状态（也需要同一把锁）
+#     ↓ 被迫等待
+# 但这两个操作完全无关，不应该互相阻塞
+
 
 
 # -- MessageBus: JSONL inbox per teammate --
@@ -258,7 +265,7 @@ class TeammateManager:
 
             # -- IDLE PHASE: poll for inbox messages and unclaimed tasks --
             self._set_status(name, "idle")
-            resume = False
+            resume = False # 记录是否有消息
             polls = IDLE_TIMEOUT // max(POLL_INTERVAL, 1)
             for _ in range(polls):
                 time.sleep(POLL_INTERVAL)
@@ -269,9 +276,9 @@ class TeammateManager:
                             self._set_status(name, "shutdown")
                             return
                         messages.append({"role": "user", "content": json.dumps(msg)})
-                    resume = True
+                    resume = True # 有消息，立刻回去工作
                     break
-                unclaimed = scan_unclaimed_tasks()
+                unclaimed = scan_unclaimed_tasks() # 检查任务看板
                 if unclaimed:
                     task = unclaimed[0]
                     claim_task(task["id"], name)
@@ -279,12 +286,13 @@ class TeammateManager:
                         f"<auto-claimed>Task #{task['id']}: {task['subject']}\n"
                         f"{task.get('description', '')}</auto-claimed>"
                     )
+                    # 身份重注入检查
                     if len(messages) <= 3:
                         messages.insert(0, make_identity_block(name, role, team_name))
                         messages.insert(1, {"role": "assistant", "content": f"I am {name}. Continuing."})
                     messages.append({"role": "user", "content": task_prompt})
                     messages.append({"role": "assistant", "content": f"Claimed task #{task['id']}. Working on it."})
-                    resume = True
+                    resume = True # 找到了任务
                     break
 
             if not resume:

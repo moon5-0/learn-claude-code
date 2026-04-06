@@ -45,8 +45,8 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-if os.getenv("ANTHROPIC_BASE_URL"):
-    os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
+# if os.getenv("ANTHROPIC_BASE_URL"):
+#     os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
 WORKDIR = Path.cwd()
 client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL"))
@@ -104,6 +104,7 @@ def auto_compact(messages: list) -> list:
             f.write(json.dumps(msg, default=str) + "\n")
     print(f"[transcript saved: {transcript_path}]")
     # Ask LLM to summarize
+    # 注意这是一次独立的 API 调用，不是在主对话里。
     conversation_text = json.dumps(messages, default=str)[:80000]
     response = client.messages.create(
         model=MODEL,
@@ -113,7 +114,8 @@ def auto_compact(messages: list) -> list:
             "Be concise but preserve critical details.\n\n" + conversation_text}],
         max_tokens=2000,
     )
-    summary = response.content[0].text
+    # 跳过 ThinkingBlock，找到第一个 TextBlock
+    summary = next(b.text for b in response.content if hasattr(b, "text"))
     # Replace all messages with compressed summary
     return [
         {"role": "user", "content": f"[Conversation compressed. Transcript: {transcript_path}]\n\n{summary}"},
@@ -211,6 +213,7 @@ def agent_loop(messages: list):
         manual_compact = False
         for block in response.content:
             if block.type == "tool_use":
+                # 如果模型主动调用了 compact 工具，先标记一下，返回结果后再处理。
                 if block.name == "compact":
                     manual_compact = True
                     output = "Compressing..."

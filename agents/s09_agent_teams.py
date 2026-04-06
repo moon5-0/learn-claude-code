@@ -54,11 +54,11 @@ from anthropic import Anthropic
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
-if os.getenv("ANTHROPIC_BASE_URL"):
-    os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
+# if os.getenv("ANTHROPIC_BASE_URL"):
+#     os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
 WORKDIR = Path.cwd()
-client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL"))
+client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL") ,auth_token=os.getenv("ANTHROPIC_AUTH_TOKEN"))
 MODEL = os.environ["MODEL_ID"]
 TEAM_DIR = WORKDIR / ".team"
 INBOX_DIR = TEAM_DIR / "inbox"
@@ -80,6 +80,8 @@ class MessageBus:
         self.dir = inbox_dir
         self.dir.mkdir(parents=True, exist_ok=True)
 
+    # LLM 不会传 extra，因为模型只能看到工具描述里定义的参数。
+    # extra 是留给 Python 代码内部直接调用用的
     def send(self, sender: str, to: str, content: str,
              msg_type: str = "message", extra: dict = None) -> str:
         if msg_type not in VALID_MSG_TYPES:
@@ -90,9 +92,10 @@ class MessageBus:
             "content": content,
             "timestamp": time.time(),
         }
-        if extra:
+        if extra: 
             msg.update(extra)
         inbox_path = self.dir / f"{to}.jsonl"
+        # "a" 模式（append），不会覆盖之前的消息，只在文件末尾追加
         with open(inbox_path, "a") as f:
             f.write(json.dumps(msg) + "\n")
         return f"Sent {msg_type} to {to}"
@@ -105,7 +108,7 @@ class MessageBus:
         for line in inbox_path.read_text().strip().splitlines():
             if line:
                 messages.append(json.loads(line))
-        inbox_path.write_text("")
+        inbox_path.write_text("") # 清空
         return messages
 
     def broadcast(self, sender: str, content: str, teammates: list) -> str:
@@ -126,13 +129,13 @@ class TeammateManager:
         self.dir = team_dir
         self.dir.mkdir(exist_ok=True)
         self.config_path = self.dir / "config.json"
-        self.config = self._load_config()
-        self.threads = {}
+        self.config = self._load_config() # 读取已有配置
+        self.threads = {} # 记录每个队友的线程对象
 
     def _load_config(self) -> dict:
         if self.config_path.exists():
             return json.loads(self.config_path.read_text())
-        return {"team_name": "default", "members": []}
+        return {"team_name": "default", "members": []} # 首次运行返回空团队
 
     def _save_config(self):
         self.config_path.write_text(json.dumps(self.config, indent=2))
@@ -244,7 +247,7 @@ class TeammateManager:
             lines.append(f"  {m['name']} ({m['role']}): {m['status']}")
         return "\n".join(lines)
 
-    def member_names(self) -> list:
+    def member_names(self) -> list: # 广播的时候用到
         return [m["name"] for m in self.config["members"]]
 
 
@@ -305,7 +308,7 @@ def _run_edit(path: str, old_text: str, new_text: str) -> str:
     except Exception as e:
         return f"Error: {e}"
 
-
+# **kw 是一个特殊参数，表示“收集所有传入的关键字参数到一个字典里”。
 # -- Lead tool dispatch (9 tools) --
 TOOL_HANDLERS = {
     "bash":            lambda **kw: _run_bash(kw["command"]),

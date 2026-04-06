@@ -51,28 +51,31 @@ class TaskManager:
         self._next_id = self._max_id() + 1
 
     def _max_id(self) -> int:
+        # 扫描 .tasks/ 下所有 task_*.json 文件，提取 ID 数字：
         ids = [int(f.stem.split("_")[1]) for f in self.dir.glob("task_*.json")]
         return max(ids) if ids else 0
-
+    # 读任务 返回字典，供内部自用
     def _load(self, task_id: int) -> dict:
         path = self.dir / f"task_{task_id}.json"
         if not path.exists():
             raise ValueError(f"Task {task_id} not found")
         return json.loads(path.read_text())
-
+    # 保存任务
     def _save(self, task: dict):
         path = self.dir / f"task_{task['id']}.json"
+        # json.dumps(dict) → dict 变字符串
+        # json.loads(str) → 字符串变 dict
         path.write_text(json.dumps(task, indent=2))
-
+    # 
     def create(self, subject: str, description: str = "") -> str:
         task = {
             "id": self._next_id, "subject": subject, "description": description,
             "status": "pending", "blockedBy": [], "blocks": [], "owner": "",
         }
         self._save(task)
-        self._next_id += 1
+        self._next_id += 1 # ID自增
         return json.dumps(task, indent=2)
-
+    # 返回 JSON 字符串，给 LLM 看的
     def get(self, task_id: int) -> str:
         return json.dumps(self._load(task_id), indent=2)
 
@@ -85,9 +88,9 @@ class TaskManager:
             task["status"] = status
             # When a task is completed, remove it from all other tasks' blockedBy
             if status == "completed":
-                self._clear_dependency(task_id)
+                self._clear_dependency(task_id) # 完成后自动解锁下游
         if add_blocked_by:
-            task["blockedBy"] = list(set(task["blockedBy"] + add_blocked_by))
+            task["blockedBy"] = list(set(task["blockedBy"] + add_blocked_by)) # 用 set 去重，防止重复添加。
         if add_blocks:
             task["blocks"] = list(set(task["blocks"] + add_blocks))
             # Bidirectional: also update the blocked tasks' blockedBy lists
@@ -104,6 +107,7 @@ class TaskManager:
 
     def _clear_dependency(self, completed_id: int):
         """Remove completed_id from all other tasks' blockedBy lists."""
+        # 每个 f 是一个 Path 对象，代表一个任务文件
         for f in self.dir.glob("task_*.json"):
             task = json.loads(f.read_text())
             if completed_id in task.get("blockedBy", []):
@@ -186,7 +190,7 @@ TOOL_HANDLERS = {
     "task_list":   lambda **kw: TASKS.list_all(),
     "task_get":    lambda **kw: TASKS.get(kw["task_id"]),
 }
-
+# 给模型提供了对磁盘文件的 CRUD（增删改查）能力
 TOOLS = [
     {"name": "bash", "description": "Run a shell command.",
      "input_schema": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}},
